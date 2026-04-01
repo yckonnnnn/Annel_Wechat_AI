@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 敏感信息 - 切勿上传
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+credentials/
+
+# 日志
+*.log
+logs/
+/tmp/
+/tmp/
+
+# 记忆文件 (可能包含敏感信息)
+memory/
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
