@@ -2,7 +2,6 @@ import base64
 import hashlib
 import random
 import struct
-import json
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from typing import Tuple, Dict, Any
@@ -54,10 +53,10 @@ class WeComCrypto:
 
         return msg
 
-    def decrypt_message(self, encrypt_msg: str) -> Dict[str, Any]:
+    def decrypt_message(self, encrypt_msg: str) -> str:
         """
         解密 POST 请求的消息体
-        返回解密后的 JSON 字典
+        返回解密后的 XML 字符串
         """
         encrypted = base64.b64decode(encrypt_msg)
         iv = encrypted[:16]
@@ -70,11 +69,16 @@ class WeComCrypto:
         pad_len = decrypted[-1]
         decrypted = decrypted[:-pad_len]
 
-        # 提取消息内容（去掉 16 字节随机前缀）
-        msg_len = struct.unpack(">I", decrypted[:4])[0]
-        msg_content = decrypted[4:4 + msg_len].decode("utf-8")
+        # 提取消息内容（16 字节随机前缀 + 4 字节长度 + 消息内容 + corp_id）
+        msg_len = struct.unpack(">I", decrypted[16:20])[0]
+        msg_content = decrypted[20:20 + msg_len].decode("utf-8")
 
-        return json.loads(msg_content)
+        # 验证 receiveid
+        receiveid = decrypted[20 + msg_len:].decode("utf-8")
+        if receiveid != self.corp_id:
+            raise ValueError(f"Invalid receiveid: {receiveid}")
+
+        return msg_content
 
     def encrypt_message(self, message: str) -> str:
         """
@@ -108,9 +112,9 @@ class WeComCrypto:
         return base64.b64encode(iv + encrypted).decode("utf-8")
 
 
-def verify_callback_signature(token: str, signature: str, timestamp: str, nonce: str) -> bool:
+def verify_callback_signature(token: str, signature: str, timestamp: str, nonce: str, msg_encrypt: str) -> bool:
     """验证回调 URL 签名（用于 POST 请求）"""
-    values = [token, timestamp, nonce]
+    values = [token, timestamp, nonce, msg_encrypt]
     values.sort()
     sha1 = hashlib.sha1("".join(values).encode("utf-8"))
     return sha1.hexdigest() == signature

@@ -1,6 +1,6 @@
 import hashlib
-import json
 import time
+import xml.etree.ElementTree as ET
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, Query
@@ -118,32 +118,34 @@ async def handle_message(request: Request):
     timestamp = request.query_params.get("timestamp", "")
     nonce = request.query_params.get("nonce", "")
 
-    # 解析请求体
+    # 解析请求体（企业微信发送的是 XML）
     try:
-        encrypted_data = json.loads(body)
-    except json.JSONDecodeError as e:
-        print(f"[Callback POST] JSON 解析失败：{e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        root = ET.fromstring(body.decode("utf-8"))
+        encrypt_node = root.find("Encrypt")
+    except ET.ParseError as e:
+        print(f"[Callback POST] XML 解析失败：{e}")
+        raise HTTPException(status_code=400, detail="Invalid XML")
 
-    # 提取加密消息
-    encrypt_msg = encrypted_data.get("encrypt", "")
-    if not encrypt_msg:
-        # 如果没有 encrypt 字段，可能是未加密消息（测试模式）
-        print("[Callback POST] 未找到 encrypt 字段，尝试直接解析")
-        message_data = encrypted_data
-    else:
-        # 验证签名（使用 token、timestamp、nonce、encrypt_msg）
-        if not verify_callback_signature(wecom_config["token"], msg_signature, timestamp, nonce):
-            print("[Callback POST] 签名验证失败")
-            raise HTTPException(status_code=400, detail="Invalid signature")
+    if encrypt_node is None or not encrypt_node.text:
+        print("[Callback POST] 未找到 Encrypt 字段")
+        raise HTTPException(status_code=400, detail="Missing Encrypt field")
 
-        # 解密消息
-        try:
-            message_data = crypto.decrypt_message(encrypt_msg)
-            print(f"[Callback POST] 解密后的消息：{message_data}")
-        except Exception as e:
-            print(f"[Callback POST] 解密失败：{e}")
-            raise HTTPException(status_code=400, detail=f"Decrypt failed: {e}")
+    encrypt_msg = encrypt_node.text
+
+    # 验证签名（使用 token、timestamp、nonce、encrypt_msg）
+    if not verify_callback_signature(wecom_config["token"], msg_signature, timestamp, nonce, encrypt_msg):
+        print("[Callback POST] 签名验证失败")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # 解密消息
+    try:
+        decrypted_xml = crypto.decrypt_message(encrypt_msg)
+        root = ET.fromstring(decrypted_xml)
+        message_data = {child.tag: child.text or "" for child in root}
+        print(f"[Callback POST] 解密后的消息：{message_data}")
+    except Exception as e:
+        print(f"[Callback POST] 解密失败：{e}")
+        raise HTTPException(status_code=400, detail=f"Decrypt failed: {e}")
 
     # 提取消息内容
     from_user = message_data.get("FromUserName", "")

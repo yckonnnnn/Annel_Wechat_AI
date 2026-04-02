@@ -1,4 +1,4 @@
-import json
+import xml.etree.ElementTree as ET
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from backend.core_config import wecom_config
@@ -16,6 +16,12 @@ crypto = WeComCrypto(
 
 router = APIRouter(tags=["callback"])
 
+
+def _xml_to_dict(xml_str: str) -> dict:
+    root = ET.fromstring(xml_str)
+    return {child.tag: child.text or "" for child in root}
+
+
 @router.get("/callback")
 async def verify_callback(
     msg_signature: str = Query(...),
@@ -30,6 +36,7 @@ async def verify_callback(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Decrypt failed: {e}")
 
+
 @router.post("/callback")
 async def handle_message(request: Request):
     body = await request.body()
@@ -38,20 +45,23 @@ async def handle_message(request: Request):
     nonce = request.query_params.get("nonce", "")
 
     try:
-        encrypted_data = json.loads(body)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        root = ET.fromstring(body.decode("utf-8"))
+        encrypt_node = root.find("Encrypt")
+    except ET.ParseError as e:
+        raise HTTPException(status_code=400, detail="Invalid XML")
 
-    encrypt_msg = encrypted_data.get("encrypt", "")
-    if not encrypt_msg:
-        message_data = encrypted_data
-    else:
-        if not verify_callback_signature(wecom_config["token"], msg_signature, timestamp, nonce):
-            raise HTTPException(status_code=400, detail="Invalid signature")
-        try:
-            message_data = crypto.decrypt_message(encrypt_msg)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Decrypt failed: {e}")
+    if encrypt_node is None or not encrypt_node.text:
+        raise HTTPException(status_code=400, detail="Missing Encrypt field")
+
+    encrypt_msg = encrypt_node.text
+
+    if not verify_callback_signature(wecom_config["token"], msg_signature, timestamp, nonce, encrypt_msg):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    try:
+        decrypted_xml = crypto.decrypt_message(encrypt_msg)
+        message_data = _xml_to_dict(decrypted_xml)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Decrypt failed: {e}")
 
     from_user = message_data.get("FromUserName", "")
     msg_type = message_data.get("MsgType", "")
