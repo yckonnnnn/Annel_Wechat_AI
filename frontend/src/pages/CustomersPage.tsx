@@ -4,6 +4,9 @@ import { api } from '../lib/api'
 
 interface CustomerSummary {
   external_userid: string
+  name: string
+  avatar: string
+  corp_name: string
   message_count: number
   last_updated: number
 }
@@ -62,7 +65,7 @@ export default function CustomersPage() {
         </svg>
         <input
           type="text"
-          placeholder="搜索客户 ID..."
+          placeholder="搜索客户姓名或 ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -105,21 +108,33 @@ export default function CustomersPage() {
               onMouseOver={(e) => (e.currentTarget.style.background = '#f9fafb')}
               onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              <div
-                style={{
+              {c.avatar ? (
+                <img src={c.avatar} alt={c.name}
+                  style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+              ) : (
+                <div style={{
                   width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
                   background: avatarColor(c.external_userid),
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 13, fontWeight: 600,
-                }}
-              >
-                {c.external_userid.slice(-2).toUpperCase()}
-              </div>
+                  color: '#fff', fontSize: 15, fontWeight: 600,
+                }}>
+                  {(c.name || c.external_userid).slice(0, 1)}
+                </div>
+              )}
               <div style={{ marginLeft: 14, flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 }}>
-                  {c.external_userid}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>
+                    {c.name || c.external_userid}
+                  </p>
+                  {c.corp_name && (
+                    <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '1px 7px', borderRadius: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {c.corp_name}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: 12, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {c.external_userid} · {c.message_count} 条消息
                 </p>
-                <p style={{ fontSize: 12, color: '#9ca3af' }}>{c.message_count} 条消息</p>
               </div>
               <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, marginLeft: 12 }}>
                 {formatTime(c.last_updated)}

@@ -1,8 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
 
-// ─── 类型 ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Customer {
+  external_userid: string
+  name: string
+  avatar: string
+  corp_name: string
+}
+
+interface CustomerListResponse {
+  data: { count: number; customers: Customer[] }
+}
 
 interface ScheduledTask {
   id: string
@@ -16,8 +27,6 @@ interface ScheduleListResponse {
   data: ScheduledTask[]
 }
 
-// ─── Cron 辅助 ───────────────────────────────────────────────────────────────
-
 type RepeatType = 'daily' | 'weekdays' | 'weekends' | 'weekly'
 
 const REPEAT_OPTIONS: { value: RepeatType; label: string }[] = [
@@ -28,12 +37,9 @@ const REPEAT_OPTIONS: { value: RepeatType; label: string }[] = [
 ]
 
 const WEEKDAY_OPTIONS = [
-  { value: 'mon', label: '周一' },
-  { value: 'tue', label: '周二' },
-  { value: 'wed', label: '周三' },
-  { value: 'thu', label: '周四' },
-  { value: 'fri', label: '周五' },
-  { value: 'sat', label: '周六' },
+  { value: 'mon', label: '周一' }, { value: 'tue', label: '周二' },
+  { value: 'wed', label: '周三' }, { value: 'thu', label: '周四' },
+  { value: 'fri', label: '周五' }, { value: 'sat', label: '周六' },
   { value: 'sun', label: '周日' },
 ]
 
@@ -56,139 +62,275 @@ function describeCron(cron: Record<string, string>): string {
   return `每${found?.label ?? dow} ${h}:${m}`
 }
 
-// ─── 子组件：立即发送 Tab ─────────────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb',
+  borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box',
+}
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 13, color: '#374151', fontWeight: 500, marginBottom: 6,
+}
 
-function SendNowTab({ defaultSender }: { defaultSender: string }) {
+// ─── Customer Multi-Select ────────────────────────────────────────────────────
+
+function CustomerMultiSelect({
+  customers,
+  selected,
+  onChange,
+}: {
+  customers: Customer[]
+  selected: string[]           // external_userid[]
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  // 点击外部关闭
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = customers.filter((c) =>
+    c.name.includes(search) || c.external_userid.includes(search) || c.corp_name.includes(search)
+  )
+
+  const toggle = (id: string) => {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+  }
+
+  const selectedCustomers = customers.filter((c) => selected.includes(c.external_userid))
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <label style={labelStyle}>
+        指定客户
+        <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: 4 }}>（不选 = 发送给该员工所有客户）</span>
+      </label>
+
+      {/* 触发框 */}
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          minHeight: 42, padding: '6px 12px', border: `1.5px solid ${open ? '#6366f1' : '#e5e7eb'}`,
+          borderRadius: 8, cursor: 'pointer', background: '#fff', boxSizing: 'border-box',
+          display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+          transition: 'border-color 0.15s',
+        }}
+      >
+        {selectedCustomers.length === 0 ? (
+          <span style={{ color: '#9ca3af', fontSize: 14 }}>点击选择客户...</span>
+        ) : (
+          selectedCustomers.map((c) => (
+            <span
+              key={c.external_userid}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                background: '#eef2ff', color: '#6366f1', borderRadius: 6,
+                fontSize: 13, padding: '2px 8px', fontWeight: 500,
+              }}
+            >
+              {c.name}
+              <span
+                onClick={(e) => { e.stopPropagation(); toggle(c.external_userid) }}
+                style={{ cursor: 'pointer', opacity: 0.6, marginLeft: 2, lineHeight: 1 }}
+              >×</span>
+            </span>
+          ))
+        )}
+        <span style={{ marginLeft: 'auto', color: '#9ca3af', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+      </div>
+
+      {/* 下拉面板 */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100,
+          background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden',
+        }}>
+          {/* 搜索 */}
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid #f3f4f6' }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索客户姓名..."
+              onClick={(e) => e.stopPropagation()}
+              style={{ ...inputStyle, padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}
+              autoFocus
+            />
+          </div>
+
+          {/* 全选/清空 */}
+          {customers.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, padding: '6px 12px', borderBottom: '1px solid #f3f4f6' }}>
+              <button onClick={() => onChange(customers.map((c) => c.external_userid))}
+                style={{ fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                全选
+              </button>
+              <span style={{ color: '#e5e7eb' }}>|</span>
+              <button onClick={() => onChange([])}
+                style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                清空
+              </button>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: '#9ca3af' }}>
+                已选 {selected.length}/{customers.length}
+              </span>
+            </div>
+          )}
+
+          {/* 客户列表 */}
+          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>无匹配客户</div>
+            ) : (
+              filtered.map((c) => {
+                const isSelected = selected.includes(c.external_userid)
+                return (
+                  <div
+                    key={c.external_userid}
+                    onClick={() => toggle(c.external_userid)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      cursor: 'pointer', background: isSelected ? '#f5f3ff' : 'transparent',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f9fafb' }}
+                    onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {/* 勾选框 */}
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                      border: isSelected ? 'none' : '1.5px solid #d1d5db',
+                      background: isSelected ? '#6366f1' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {isSelected && <span style={{ color: '#fff', fontSize: 12, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    {/* 头像 */}
+                    {c.avatar ? (
+                      <img src={c.avatar} alt={c.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                        background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 13, fontWeight: 600,
+                      }}>
+                        {c.name.slice(0, 1)}
+                      </div>
+                    )}
+                    {/* 名字 */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: '#111827', margin: 0 }}>{c.name}</p>
+                      {c.corp_name && <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>{c.corp_name}</p>}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── SendNowTab ───────────────────────────────────────────────────────────────
+
+function SendNowTab({ defaultSender, customers }: { defaultSender: string; customers: Customer[] }) {
   const [sender, setSender] = useState(defaultSender)
   const [content, setContent] = useState('')
-  const [targets, setTargets] = useState('')     // 逗号分隔的 external_userid，空 = 全部
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [msg, setMsg] = useState('')
 
   const handleSend = () => {
     if (!sender.trim() || !content.trim()) {
-      setStatus('error')
-      setMsg('发送人和消息内容不能为空')
-      return
+      setStatus('error'); setMsg('发送人和消息内容不能为空'); return
     }
-    setStatus('sending')
-    setMsg('')
-    const external_userids = targets.trim()
-      ? targets.split(',').map((s) => s.trim()).filter(Boolean)
-      : null
+    setStatus('sending'); setMsg('')
     api
-      .post('/api/proactive', { sender: sender.trim(), content: content.trim(), external_userids })
-      .then(() => {
-        setStatus('ok')
-        setMsg('发送成功！')
-        setContent('')
-        setTargets('')
+      .post('/api/proactive', {
+        sender: sender.trim(),
+        content: content.trim(),
+        external_userids: selectedIds.length > 0 ? selectedIds : null,
       })
-      .catch((e: Error) => {
-        setStatus('error')
-        setMsg(e.message)
-      })
+      .then(() => { setStatus('ok'); setMsg('发送成功！'); setContent(''); setSelectedIds([]) })
+      .catch((e: Error) => { setStatus('error'); setMsg(e.message) })
   }
 
   return (
-    <div className="space-y-5 max-w-lg">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">发送人（企微员工 userid）</label>
-        <input
-          value={sender}
-          onChange={(e) => setSender(e.target.value)}
-          placeholder="例：zhangsan"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">消息内容</label>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={4}
-          placeholder="输入要发送的消息..."
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          指定客户（留空 = 该员工所有客户）
-        </label>
-        <input
-          value={targets}
-          onChange={(e) => setTargets(e.target.value)}
-          placeholder="external_userid1, external_userid2, ..."
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
-        <p className="text-xs text-gray-400 mt-1">多个 ID 用英文逗号分隔</p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>发送人（企微员工 userid）</label>
+            <input value={sender} onChange={(e) => setSender(e.target.value)} placeholder="例：zhangsan" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>消息内容</label>
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4}
+              placeholder="输入要发送的消息..." style={{ ...inputStyle, resize: 'none' }} />
+          </div>
+          <CustomerMultiSelect customers={customers} selected={selectedIds} onChange={setSelectedIds} />
+        </div>
 
-      {msg && (
-        <p className={`text-sm ${status === 'ok' ? 'text-green-600' : 'text-red-500'}`}>{msg}</p>
-      )}
+        {msg && <p style={{ fontSize: 14, color: status === 'ok' ? '#10b981' : '#ef4444', marginTop: 12 }}>{msg}</p>}
 
-      <button
-        onClick={handleSend}
-        disabled={status === 'sending'}
-        className="px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-      >
-        {status === 'sending' ? '发送中...' : '立即发送'}
-      </button>
+        <button onClick={handleSend} disabled={status === 'sending'}
+          style={{
+            marginTop: 16, padding: '11px 28px',
+            background: status === 'sending' ? '#6b7280' : 'linear-gradient(135deg, #07c160, #06ad56)',
+            border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 600,
+            cursor: status === 'sending' ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 12px rgba(7,193,96,0.3)',
+          }}>
+          {status === 'sending' ? '发送中...' : '立即发送'}
+        </button>
+      </div>
     </div>
   )
 }
 
-// ─── 子组件：定时任务 Tab ─────────────────────────────────────────────────────
+// ─── ScheduleTab ─────────────────────────────────────────────────────────────
 
-function ScheduleTab({ defaultSender }: { defaultSender: string }) {
+function ScheduleTab({ defaultSender, customers }: { defaultSender: string; customers: Customer[] }) {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-
-  // 表单状态
   const [sender, setSender] = useState(defaultSender)
   const [content, setContent] = useState('')
   const [repeat, setRepeat] = useState<RepeatType>('daily')
   const [weekday, setWeekday] = useState('mon')
   const [hour, setHour] = useState('8')
   const [minute, setMinute] = useState('0')
-  const [targets, setTargets] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
   const loadTasks = () => {
-    api
-      .get<ScheduleListResponse>('/api/proactive/schedule')
+    api.get<ScheduleListResponse>('/api/proactive/schedule')
       .then((res) => setTasks(res.data))
       .catch(() => setTasks([]))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    loadTasks()
-  }, [])
+  useEffect(() => { loadTasks() }, [])
 
   const handleCreate = () => {
-    if (!sender.trim() || !content.trim()) {
-      setFormError('发送人和内容不能为空')
-      return
-    }
-    setSubmitting(true)
-    setFormError('')
+    if (!sender.trim() || !content.trim()) { setFormError('发送人和内容不能为空'); return }
+    setSubmitting(true); setFormError('')
     const cron = buildCron(repeat, weekday, hour, minute)
-    const task_id = `task_${Date.now()}`
-    const external_userids = targets.trim()
-      ? targets.split(',').map((s) => s.trim()).filter(Boolean)
-      : null
-    api
-      .post('/api/proactive/schedule', { task_id, sender: sender.trim(), content: content.trim(), cron, external_userids })
-      .then(() => {
-        setShowForm(false)
-        setContent('')
-        setTargets('')
-        loadTasks()
-      })
+    api.post('/api/proactive/schedule', {
+      task_id: `task_${Date.now()}`,
+      sender: sender.trim(),
+      content: content.trim(),
+      cron,
+      external_userids: selectedIds.length > 0 ? selectedIds : null,
+    })
+      .then(() => { setShowForm(false); setContent(''); setSelectedIds([]); loadTasks() })
       .catch((e: Error) => setFormError(e.message))
       .finally(() => setSubmitting(false))
   }
@@ -198,142 +340,110 @@ function ScheduleTab({ defaultSender }: { defaultSender: string }) {
     api.delete(`/api/proactive/schedule/${id}`).then(() => loadTasks()).catch(() => {})
   }
 
+  // 根据 external_userid 反查名字
+  const resolveNames = (ids: string[] | null) => {
+    if (!ids) return '全部客户'
+    return ids.map((id) => customers.find((c) => c.external_userid === id)?.name || id).join('、')
+  }
+
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">{tasks.length} 个定时任务</p>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-        >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 680 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 14, color: '#6b7280' }}>{tasks.length} 个定时任务</p>
+        <button onClick={() => setShowForm(!showForm)}
+          style={{
+            padding: '9px 18px', background: showForm ? '#f3f4f6' : '#6366f1',
+            border: 'none', borderRadius: 8, color: showForm ? '#374151' : '#fff',
+            fontSize: 14, fontWeight: 500, cursor: 'pointer',
+          }}>
           {showForm ? '取消' : '+ 新建任务'}
         </button>
       </div>
 
-      {/* 新建表单 */}
       {showForm && (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700">新建定时任务</h3>
-          <div className="grid grid-cols-2 gap-4">
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 16 }}>新建定时任务</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">发送人（userid）</label>
-              <input
-                value={sender}
-                onChange={(e) => setSender(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
+              <label style={labelStyle}>发送人（userid）</label>
+              <input value={sender} onChange={(e) => setSender(e.target.value)} style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">重复规则</label>
-              <select
-                value={repeat}
-                onChange={(e) => setRepeat(e.target.value as RepeatType)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white"
-              >
-                {REPEAT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
+              <label style={labelStyle}>重复规则</label>
+              <select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatType)}
+                style={{ ...inputStyle, background: '#fff' }}>
+                {REPEAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
-
-          <div className="flex gap-3 items-end">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
             {repeat === 'weekly' && (
               <div>
-                <label className="block text-xs text-gray-600 mb-1">星期</label>
-                <select
-                  value={weekday}
-                  onChange={(e) => setWeekday(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white"
-                >
-                  {WEEKDAY_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
+                <label style={labelStyle}>星期</label>
+                <select value={weekday} onChange={(e) => setWeekday(e.target.value)}
+                  style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff' }}>
+                  {WEEKDAY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             )}
             <div>
-              <label className="block text-xs text-gray-600 mb-1">时</label>
-              <input
-                type="number"
-                min={0}
-                max={23}
-                value={hour}
-                onChange={(e) => setHour(e.target.value)}
-                className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
+              <label style={labelStyle}>时</label>
+              <input type="number" min={0} max={23} value={hour} onChange={(e) => setHour(e.target.value)}
+                style={{ width: 70, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, outline: 'none' }} />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">分</label>
-              <input
-                type="number"
-                min={0}
-                max={59}
-                value={minute}
-                onChange={(e) => setMinute(e.target.value)}
-                className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
+              <label style={labelStyle}>分</label>
+              <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)}
+                style={{ width: 70, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, outline: 'none' }} />
             </div>
           </div>
-
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">消息内容</label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>消息内容</label>
+            <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={3}
+              style={{ ...inputStyle, resize: 'none' }} />
           </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">指定客户（留空 = 全部）</label>
-            <input
-              value={targets}
-              onChange={(e) => setTargets(e.target.value)}
-              placeholder="external_userid1, external_userid2, ..."
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
+          <div style={{ marginBottom: 16 }}>
+            <CustomerMultiSelect customers={customers} selected={selectedIds} onChange={setSelectedIds} />
           </div>
-          {formError && <p className="text-sm text-red-500">{formError}</p>}
-          <button
-            onClick={handleCreate}
-            disabled={submitting}
-            className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
+          {formError && <p style={{ fontSize: 13, color: '#ef4444', marginBottom: 12 }}>{formError}</p>}
+          <button onClick={handleCreate} disabled={submitting}
+            style={{
+              padding: '10px 24px', background: '#6366f1', border: 'none',
+              borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 500,
+              cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1,
+            }}>
             {submitting ? '创建中...' : '创建任务'}
           </button>
         </div>
       )}
 
-      {/* 任务列表 */}
       {loading ? (
-        <p className="text-sm text-gray-400">加载中...</p>
+        <p style={{ fontSize: 14, color: '#9ca3af' }}>加载中...</p>
       ) : tasks.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-xl border border-gray-100">
-          暂无定时任务
+        <div style={{ textAlign: 'center', padding: '48px 0', background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', color: '#9ca3af', fontSize: 14 }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>⏰</div>暂无定时任务
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
-          {tasks.map((t) => (
-            <div key={t.id} className="flex items-start px-5 py-4 gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          {tasks.map((t, i) => (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 16, padding: '16px 20px',
+              borderTop: i > 0 ? '1px solid #f3f4f6' : 'none',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, background: '#eef2ff', color: '#6366f1', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
                     {describeCron(t.cron)}
                   </span>
-                  <span className="text-xs text-gray-400">发送人：{t.sender}</span>
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>发送人：{t.sender}</span>
                 </div>
-                <p className="text-sm text-gray-700 line-clamp-2">{t.content}</p>
-                {t.external_userids && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    指定 {t.external_userids.length} 位客户
-                  </p>
-                )}
+                <p style={{ fontSize: 14, color: '#374151', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.content}</p>
+                <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+                  客户：{resolveNames(t.external_userids)}
+                </p>
               </div>
-              <button
-                onClick={() => handleDelete(t.id)}
-                className="text-xs text-red-400 hover:text-red-600 transition-colors shrink-0 mt-1"
-              >
+              <button onClick={() => handleDelete(t.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13, flexShrink: 0 }}>
                 删除
               </button>
             </div>
@@ -344,41 +454,47 @@ function ScheduleTab({ defaultSender }: { defaultSender: string }) {
   )
 }
 
-// ─── 主页面 ───────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 type Tab = 'send' | 'schedule'
 
 export default function ProactivePage() {
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('send')
+  const [customers, setCustomers] = useState<Customer[]>([])
   const defaultSender = user?.userid ?? ''
 
-  return (
-    <div className="p-8">
-      <h2 className="text-2xl font-semibold text-gray-800 mb-6">主动关怀</h2>
+  useEffect(() => {
+    api.get<CustomerListResponse>('/api/customers')
+      .then((res) => setCustomers(res.data.customers))
+      .catch(() => {})
+  }, [])
 
-      {/* Tab 切换 */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-8">
+  return (
+    <div style={{ padding: 32 }}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>主动关怀</h2>
+        <p style={{ fontSize: 14, color: '#6b7280' }}>向客户主动发送消息或创建定时任务</p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 10, padding: 4, width: 'fit-content', marginBottom: 28 }}>
         {([['send', '立即发送'], ['schedule', '定时任务']] as [Tab, string][]).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-5 py-2 text-sm rounded-md transition-colors ${
-              tab === key
-                ? 'bg-white text-gray-800 font-medium shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
+          <button key={key} onClick={() => setTab(key)} style={{
+            padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14,
+            background: tab === key ? '#fff' : 'transparent',
+            color: tab === key ? '#1f2937' : '#6b7280',
+            fontWeight: tab === key ? 600 : 400,
+            boxShadow: tab === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.15s',
+          }}>
             {label}
           </button>
         ))}
       </div>
 
-      {tab === 'send' ? (
-        <SendNowTab defaultSender={defaultSender} />
-      ) : (
-        <ScheduleTab defaultSender={defaultSender} />
-      )}
+      {tab === 'send'
+        ? <SendNowTab defaultSender={defaultSender} customers={customers} />
+        : <ScheduleTab defaultSender={defaultSender} customers={customers} />}
     </div>
   )
 }

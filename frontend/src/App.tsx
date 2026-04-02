@@ -8,6 +8,8 @@ import DashboardPage from './pages/DashboardPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
 import ProactivePage from './pages/ProactivePage'
+import FaqPage from './pages/FaqPage'
+import SettingsPage from './pages/SettingsPage'
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:external_userid" element={<CustomerDetailPage />} />
             <Route path="proactive" element={<ProactivePage />} />
+            <Route path="faq" element={<FaqPage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>
       </AuthProvider>
