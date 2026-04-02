@@ -7,13 +7,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/wecom-login-url")
 async def wecom_login_url(redirect_uri: str = Query(...)):
-    """获取企业微信扫码登录 URL"""
+    """获取企业微信扫码登录 URL（PC 端扫码，适用于普通浏览器）"""
     corp_id = wecom_config["corp_id"]
+    agent_id = wecom_config["agent_id"]
     encoded_uri = quote(redirect_uri, safe="")
     url = (
-        f"https://open.weixin.qq.com/connect/oauth2/authorize?"
-        f"appid={corp_id}&redirect_uri={encoded_uri}&response_type=code&"
-        f"scope=snsapi_base&state=STATE#wechat_redirect"
+        f"https://open.work.weixin.qq.com/wwopen/sso/qrConnect?"
+        f"appid={corp_id}&agentid={agent_id}&redirect_uri={encoded_uri}&state=STATE"
     )
     return {"errcode": 0, "url": url}
 
