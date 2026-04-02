@@ -128,3 +128,4 @@ class ConversationStore:
 
 # 全局单例
 conversation_store = ConversationStore()
+cs = conversation_store  # 别名用于导入
