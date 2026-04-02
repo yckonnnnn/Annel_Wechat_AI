@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import wecom_config, app_config
 from wecom.crypto import WeComCrypto, verify_callback_signature
@@ -14,6 +15,16 @@ from wecom.message_sender import message_sender
 from wecom.conversation_store import cs as conversation_store
 
 app = FastAPI(title="企业微信客服系统", version="1.0.0")
+
+# 企业微信域名验证文件内容
+WECOM_DOMAIN_VERIFY_CONTENT = "auBFdL1YIFnT5xwk"
+
+
+@app.get("/WW_verify_auBFdL1YIFnT5xwk.txt")
+async def wecom_domain_verify():
+    """企业微信域名所有权验证文件"""
+    return PlainTextResponse(content=WECOM_DOMAIN_VERIFY_CONTENT)
+
 
 # 初始化加密组件
 crypto = WeComCrypto(
