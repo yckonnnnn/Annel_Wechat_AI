@@ -9,8 +9,9 @@ env/
 ENV/
 .venv
 *.egg-info/
-dist/
 build/
+# 前端 node_modules 不提交，dist 需要提交（服务器直接用）
+frontend/node_modules/
 
 # IDE
 .vscode/

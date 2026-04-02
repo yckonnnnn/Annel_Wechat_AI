@@ -2,11 +2,11 @@ import json
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from backend.core_config import wecom_config
-from backend.wecom.crypto import WeComCrypto, verify_callback_signature
-from backend.wecom.token_manager import token_manager
-from backend.wecom.user_service import user_service
-from backend.wecom.message_sender import message_sender
-from backend.wecom.conversation_store import cs as conversation_store
+from wecom.crypto import WeComCrypto, verify_callback_signature
+from wecom.token_manager import token_manager
+from wecom.user_service import user_service
+from wecom.message_sender import message_sender
+from wecom.conversation_store import conversation_store
 
 crypto = WeComCrypto(
     token=wecom_config["token"],

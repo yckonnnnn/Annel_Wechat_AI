@@ -7,13 +7,14 @@ from typing import Optional, Dict, Any
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.core_config import wecom_config
-from backend.wecom.token_manager import token_manager
+from wecom.token_manager import token_manager
 
 SECRET_KEY = os.environ.get("JWT_SECRET", "change-me-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 8 * 3600
 
-USERS_FILE = os.path.join(os.path.dirname(__file__), "data", "users.json")
+# 数据目录在项目根 data/，不在 backend/data/
+USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "users.json")
 
 def _load_users() -> list:
     if os.path.exists(USERS_FILE):

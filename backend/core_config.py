@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 # 获取 .env 文件路径
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent   # 项目根目录
 ENV_FILE = BASE_DIR / ".env"
 
 # 从 .env 文件读取环境变量

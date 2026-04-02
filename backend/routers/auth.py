@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Request, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Query, Depends
 from urllib.parse import quote
-from backend.auth import exchange_code_for_userid, get_or_create_user, create_access_token
+from backend.auth import exchange_code_for_userid, get_or_create_user, create_access_token, get_current_user
 from backend.core_config import wecom_config
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,8 +37,13 @@ async def auth_callback(code: str = Query(...)):
     }
 
 @router.get("/me")
-async def get_me(request: Request):
-    # 依赖注入由 main.py 中的全局依赖处理，或直接在这里用
-    from backend.auth import get_current_user
-    user = await get_current_user(request.scope.get("Authorization"))  # 简化处理，后续走依赖
-    return {"errcode": 0, "user": user}
+async def get_me(user: dict = Depends(get_current_user)):
+    return {
+        "errcode": 0,
+        "user": {
+            "userid": user["userid"],
+            "name": user["name"],
+            "avatar": user.get("avatar", ""),
+            "role": user["role"],
+        },
+    }
