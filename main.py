@@ -11,6 +11,7 @@ from wecom.crypto import WeComCrypto, verify_callback_signature
 from wecom.token_manager import token_manager
 from wecom.user_service import user_service
 from wecom.message_sender import message_sender
+from wecom.conversation_store import cs as conversation_store
 
 app = FastAPI(title="企业微信客服系统", version="1.0.0")
 
@@ -26,6 +27,38 @@ crypto = WeComCrypto(
 async def health_check():
     """健康检查接口"""
     return {"status": "ok", "timestamp": time.time()}
+
+
+@app.get("/customers")
+async def get_customer_list(userid: str = Query(None, description="咨询师 userid")):
+    """获取咨询师客户列表"""
+    if not userid:
+        return {"errcode": 400, "errmsg": "缺少 userid 参数"}
+
+    customer_ids = user_service.get_contact_list(userid)
+    customers = []
+    for cid in customer_ids:
+        detail = user_service.get_external_contact(cid)
+        if detail:
+            customers.append(detail)
+
+    return {"errcode": 0, "errmsg": "ok", "data": {"count": len(customers), "customers": customers}}
+
+
+@app.get("/customers/{external_userid}")
+async def get_customer_detail(external_userid: str):
+    """获取单个客户详情"""
+    detail = user_service.get_external_contact(external_userid)
+    if not detail:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    return {"errcode": 0, "errmsg": "ok", "data": {"customer": detail}}
+
+
+@app.get("/users")
+async def get_user_list(department_id: int = Query(1, description="部门 ID")):
+    """获取企业成员列表"""
+    users = user_service.get_user_list(department_id)
+    return {"errcode": 0, "errmsg": "ok", "data": {"count": len(users), "users": users}}
 
 
 @app.get("/callback")
