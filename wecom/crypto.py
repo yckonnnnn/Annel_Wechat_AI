@@ -27,49 +27,33 @@ class WeComCrypto:
         sha1 = hashlib.sha1("".join(values).encode("utf-8"))
         return sha1.hexdigest() == signature
 
+    def _decrypt_aes(self, data: bytes) -> bytes:
+        """企业微信标准AES-CBC解密：IV固定为aes_key前16字节"""
+        iv = self.aes_key[:16]
+        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(data) + decryptor.finalize()
+        pad_len = decrypted[-1]
+        return decrypted[:-pad_len]
+
     def decrypt_echostr(self, echostr: str) -> str:
         """
         解密 GET 请求的 echostr
         返回解密后的字符串用于验证
         """
-        echostr_bytes = base64.b64decode(echostr)
-
-        # 前 16 字节是 IV
-        iv = echostr_bytes[:16]
-
-        # 解密
-        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv), backend=default_backend())
-        decryptor = cipher.decryptor()
-        decrypted = decryptor.update(echostr_bytes[16:]) + decryptor.finalize()
-
-        # 去掉 padding 和 prefix
+        decrypted = self._decrypt_aes(base64.b64decode(echostr))
         # 格式：16 字节随机前缀 + 4 字节消息长度 + 消息内容 + corp_id
-        pad_len = decrypted[-1]
-        decrypted = decrypted[:-pad_len]
-
-        # 提取消息长度
         msg_len = struct.unpack(">I", decrypted[16:20])[0]
-        msg = decrypted[20:20 + msg_len].decode("utf-8")
-
-        return msg
+        return decrypted[20:20 + msg_len].decode("utf-8")
 
     def decrypt_message(self, encrypt_msg: str) -> str:
         """
         解密 POST 请求的消息体
         返回解密后的 XML 字符串
         """
-        encrypted = base64.b64decode(encrypt_msg)
-        iv = encrypted[:16]
+        # _decrypt_aes 已去除 padding，结果格式：16字节随机前缀 + 4字节消息长度 + 消息内容 + corp_id
+        decrypted = self._decrypt_aes(base64.b64decode(encrypt_msg))
 
-        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv), backend=default_backend())
-        decryptor = cipher.decryptor()
-        decrypted = decryptor.update(encrypted[16:]) + decryptor.finalize()
-
-        # 去掉 padding
-        pad_len = decrypted[-1]
-        decrypted = decrypted[:-pad_len]
-
-        # 提取消息内容（16 字节随机前缀 + 4 字节长度 + 消息内容 + corp_id）
         msg_len = struct.unpack(">I", decrypted[16:20])[0]
         msg_content = decrypted[20:20 + msg_len].decode("utf-8")
 
@@ -100,16 +84,16 @@ class WeComCrypto:
         pad_len = 32 - (len(payload) % 32)
         payload = payload + bytes([pad_len] * pad_len)
 
-        # 生成随机 IV
-        iv = bytes([random.randint(0, 255) for _ in range(16)])
+        # 企业微信标准：IV固定为aes_key前16字节
+        iv = self.aes_key[:16]
 
         # 加密
         cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         encrypted = encryptor.update(payload) + encryptor.finalize()
 
-        # Base64 编码
-        return base64.b64encode(iv + encrypted).decode("utf-8")
+        # Base64 编码（无需prepend IV）
+        return base64.b64encode(encrypted).decode("utf-8")
 
 
 def verify_callback_signature(token: str, signature: str, timestamp: str, nonce: str, msg_encrypt: str) -> bool:
