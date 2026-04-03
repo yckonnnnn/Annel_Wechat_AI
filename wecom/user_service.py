@@ -26,9 +26,9 @@ class UserService:
         data = self._get(f"{self.API_BASE}/externalcontact/get", {"external_userid": external_userid})
         return data.get("external_contact", {}) if data.get("errcode") == 0 else None
 
-    def get_user_list(self, department_id: int = 1) -> List[Dict[str, Any]]:
-        """获取企业成员列表"""
-        data = self._get(f"{self.API_BASE}/user/list", {"department_id": department_id})
+    def get_user_list(self, department_id: int = 1, fetch_child: int = 1) -> List[Dict[str, Any]]:
+        """获取企业成员列表，fetch_child=1 递归获取所有子部门成员"""
+        data = self._get(f"{self.API_BASE}/user/list", {"department_id": department_id, "fetch_child": fetch_child})
         return data.get("userlist", []) if data.get("errcode") == 0 else []
 
     def get_contact_info(self, external_userid: str) -> str:

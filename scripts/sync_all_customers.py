@@ -15,7 +15,12 @@
 
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
+
+
+def ts():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # 添加项目根目录到 Python 路径
 project_root = Path(__file__).parent.parent
@@ -30,14 +35,14 @@ from wecom.customer_cache import customer_cache
 def sync_all_customers():
     """全量同步所有员工的所有客户"""
     print("=" * 60)
-    print("开始全量同步企业客户数据")
+    print(f"[{ts()}] 开始全量同步企业客户数据")
     print("=" * 60)
 
     # 1. 获取所有员工
-    print("\n[1/2] 获取企业成员列表...")
+    print(f"\n[{ts()}] [1/2] 获取企业成员列表...")
     users = user_service.get_user_list(department_id=1)
     if not users:
-        print("❌ 获取员工列表失败")
+        print(f"[{ts()}] ❌ 获取员工列表失败")
         print("\n可能原因:")
         print("  1. 企微 API 有 IP 白名单限制，此脚本必须在服务器上运行")
         print("  2. 检查 token 是否有效")
@@ -45,10 +50,10 @@ def sync_all_customers():
 
     # 过滤出有企业微信账号的员工（有 userid）
     valid_users = [u for u in users if u.get("userid")]
-    print(f"✓ 找到 {len(valid_users)} 名员工")
+    print(f"[{ts()}] ✓ 找到 {len(valid_users)} 名员工")
 
     # 2. 逐个员工同步客户
-    print("\n[2/2] 逐个同步员工客户...")
+    print(f"\n[{ts()}] [2/2] 逐个同步员工客户...")
     print("-" * 60)
 
     total_customers = 0
@@ -59,9 +64,8 @@ def sync_all_customers():
     for i, user in enumerate(valid_users, 1):
         userid = user.get("userid")
         name = user.get("name", userid)
-        department = user.get("department", [])
 
-        print(f"[{i}/{len(valid_users)}] 同步 {name} ({userid})... ", end="", flush=True)
+        print(f"[{ts()}] [{i}/{len(valid_users)}] 开始同步 {name} ({userid})", flush=True)
 
         try:
             result = customer_cache.sync_user_customers(userid, force_full=True)
@@ -70,14 +74,14 @@ def sync_all_customers():
                 total_customers += result["total"]
                 total_new += result["new_count"]
                 success_count += 1
-                print(f"✓ 总客户={result['total']}, 新增={result['new_count']}")
+                print(f"[{ts()}] [{i}/{len(valid_users)}] ✓ {name} 完成，总客户={result['total']}, 新增={result['new_count']}", flush=True)
             else:
                 fail_count += 1
-                print(f"❌ {result['errmsg']}")
+                print(f"[{ts()}] [{i}/{len(valid_users)}] ❌ {name} 失败：{result['errmsg']}", flush=True)
 
         except Exception as e:
             fail_count += 1
-            print(f"❌ 异常：{e}")
+            print(f"[{ts()}] [{i}/{len(valid_users)}] ❌ {name} 异常：{e}", flush=True)
 
         # 避免 API 限流，每同步一个员工稍作停顿
         if i < len(valid_users):
@@ -85,7 +89,7 @@ def sync_all_customers():
 
     # 3. 输出统计
     print("-" * 60)
-    print("\n同步完成！")
+    print(f"\n[{ts()}] 同步完成！")
     print(f"  • 成功同步：{success_count} 人")
     print(f"  • 失败：{fail_count} 人")
     print(f"  • 总客户数：{total_customers}")

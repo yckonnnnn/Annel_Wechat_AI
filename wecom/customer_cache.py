@@ -175,16 +175,23 @@ class CustomerCache:
             return result
 
         # 5. 拉取新增客户的详情
-        print(f"[CustomerCache] 员工 {userid}: 总客户={len(api_ids)}, 新增={len(new_ids)}, 移除={len(removed_ids)}")
+        from datetime import datetime
+        def ts():
+            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        print(f"[{ts()}] 员工 {userid}: 总客户={len(api_ids)}, 新增={len(new_ids)}, 移除={len(removed_ids)}")
 
         for i, eid in enumerate(new_ids):
             detail = user_service.get_external_contact(eid)
             if detail:
                 self.save_customer_detail(eid, detail)
                 result["new_count"] += 1
-            # 避免频繁请求，每 100 个稍微停顿
-            if (i + 1) % 100 == 0:
-                time.sleep(0.1)
+                name = detail.get("name", "未知")
+                print(f"  [{ts()}] ({i+1}/{len(new_ids)}) ✓ {name} ({eid})", flush=True)
+            else:
+                print(f"  [{ts()}] ({i+1}/{len(new_ids)}) ❌ 获取失败 ({eid})", flush=True)
+            # 每个请求间隔 0.15 秒，约 400 次/分钟，避免触发企微 API 限流
+            time.sleep(0.15)
 
         # 6. 更新员工客户列表缓存
         self.save_user_customer_ids(userid, api_ids)
@@ -192,6 +199,18 @@ class CustomerCache:
         return result
 
     # ========== 工具方法 ==========
+
+    def find_owner_by_external_userid(self, external_userid: str) -> Optional[str]:
+        """根据客户 external_userid 查找归属的员工 userid"""
+        for file_path in self.customer_dir.glob("*.json"):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if external_userid in data.get("external_userids", []):
+                        return data.get("userid")
+            except:
+                continue
+        return None
 
     def get_stats(self) -> Dict:
         """获取缓存统计信息"""

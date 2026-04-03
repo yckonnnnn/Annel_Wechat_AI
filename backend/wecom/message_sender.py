@@ -28,4 +28,32 @@ class MessageSender:
             return{"success":False,"errmsg":str(e)}
     def get_send_result(self,msgid,userid):
         return {"success":False,"errmsg":"not supported for single chat"}
-message_sender=MessageSender()
+
+    def send_external_text_message(self, sender: str, external_userid: str, content: str) -> dict:
+        """
+        代员工给单个外部客户发送文本消息
+        接口: POST https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send
+        """
+        token = token_manager.get_token()
+        if not token:
+            return {"success": False, "errmsg": "no token"}
+
+        url = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send"
+        payload = {
+            "sender": sender,
+            "external_userid": external_userid,
+            "text": {"content": content},
+        }
+
+        try:
+            r = requests.post(url, params={"access_token": token}, json=payload, timeout=10)
+            r.raise_for_status()
+            d = r.json()
+            if d.get("errcode") == 0:
+                return {"success": True, "msgid": d.get("msgid", "")}
+            return {"success": False, "errcode": d.get("errcode"), "errmsg": d.get("errmsg", "")}
+        except Exception as e:
+            return {"success": False, "errmsg": str(e)}
+
+
+message_sender = MessageSender()

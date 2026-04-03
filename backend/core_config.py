@@ -32,6 +32,24 @@ def get_app_config():
     }
 
 
+def get_llm_config():
+    """获取大模型配置"""
+    return {
+        "api_key": os.environ.get("llm_api_key", ""),
+        "base_url": os.environ.get("llm_base_url", "https://api.anthropic.com/v1"),
+        "model": os.environ.get("llm_model", "claude-sonnet-4-6"),
+        "system_prompt": os.environ.get(
+            "llm_system_prompt",
+            "你是一位专业的企业微信客服助手，帮助员工回复客户消息。语气亲切、专业，尽量简洁明了。",
+        ),
+        "max_context": int(os.environ.get("llm_max_context", "10")),
+        "mock_mode": os.environ.get("llm_mock_mode", "true").lower() in ("true", "1", "yes", "on"),
+        "mock_reply": os.environ.get("llm_mock_reply", "收到您的消息，测试发送。"),
+        "default_userid": os.environ.get("auto_reply_default_userid", ""),
+    }
+
+
 # 全局配置对象
 wecom_config = get_wecom_config()
 app_config = get_app_config()
+llm_config = get_llm_config()

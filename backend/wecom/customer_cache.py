@@ -193,6 +193,23 @@ class CustomerCache:
 
     # ========== 工具方法 ==========
 
+    def find_owner_by_external_userid(self, external_userid: str) -> Optional[str]:
+        """
+        根据客户 external_userid 查找归属的员工 userid
+        遍历所有已缓存的员工客户列表
+        """
+        for file_path in self.customer_dir.glob("*.json"):
+            # 跳过 detail 目录下的文件（detail 也在 customer_dir 下，但 glob 模式是 *.json 不会递归）
+            if file_path.name.endswith(".json"):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if external_userid in data.get("external_userids", []):
+                            return data.get("userid")
+                except:
+                    continue
+        return None
+
     def get_stats(self) -> Dict:
         """获取缓存统计信息"""
         user_files = list(self.customer_dir.glob("*.json"))
