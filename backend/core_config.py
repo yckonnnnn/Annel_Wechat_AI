@@ -20,6 +20,8 @@ def get_wecom_config():
         "secret": os.environ.get("wecom_secret", ""),
         "token": os.environ.get("wecom_token", ""),
         "encoding_aes_key": os.environ.get("wecom_encoding_aes_key", ""),
+        "msgaudit_secret": os.environ.get("wecom_msgaudit_secret", ""),
+        "default_userid": os.environ.get("auto_reply_default_userid", ""),
     }
 
 

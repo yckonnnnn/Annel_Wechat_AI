@@ -46,3 +46,16 @@ memory/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# WeWork Finance SDK 二进制文件（只保留源码）
+wecom/sdk/*.so
+wecom/sdk/*.tgz
+wecom/sdk/C_sdk/chat_puller
+wecom/sdk/C_sdk/decrypt_helper
+wecom/sdk/C_sdk/tool_testSdk
+wecom/sdk/C_sdk/md5.txt
+wecom/sdk/C_sdk/version.txt
+wecom/sdk/C_sdk/config.txt
+wecom/sdk/java_sdk/
+wecom/sdk/private_key.pem
+wecom/sdk/public_key.pem
